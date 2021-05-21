@@ -14,7 +14,7 @@ const fetchUserFulfilled = payload => ({ type: 'FETCH_USER_FULFILLED', payload }
 const fetchUserEpic = action$ => action$.pipe(
   ofType('FETCH_USER'),
   mergeMap(action => 
-    //   console.log("The nameis",action.payload),
+    //   console.log("The nameis",action.payload), 
       ajax.getJSON(`https://api.github.com/users/${action.payload}`).pipe(
       map(response => fetchUserFulfilled(response)
       )
