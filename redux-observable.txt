@@ -1,0 +1,123 @@
+**************** Refrence website to learn *****************************
+--> https://www.freecodecamp.org/news/beginners-guide-to-rxjs-redux-observables/
+
+
+--> Epic is a function which takes a stream of actions and returns a stream of actions. Actions in, actions out.
+	It has roughly this type signature:
+	function (action$, state$>) gives=>  Observable<Action>;
+
+-->  The actions you emit will be immediately dispatched through the normal store.dispatch(), 
+	so under the hood redux-observable effectively does epic(action$, state$).subscribe(store.dispatch)
+
+-->   Actions always run through your reducers before your Epics even receive them.
+	If you let an incoming action pass through, it will create an infinite loop:
+
+	// DO NOT DO THIS
+	const actionEpic = action$ => action$; // creates infinite loop
+
+***************** The Basic Examples *****************
+ import { filter, mapTo } from 'rxjs/operators';
+
+ const pingEpic = action$ => action$.pipe(
+  filter(action => action.type === 'PING'),
+  mapTo({ type: 'PONG' })
+  );
+
+ // later...
+  dispatch({ type: 'PING' });
+
+--> pingEpic will listen for actions of type PING and map them to a new action, PONG. This example is functionally equivalent to doing this:
+
+	dispatch({ type: 'PING' });
+	dispatch({ type: 'PONG' });
+
+Redux-thunk use cases
+1. Make API Calls
+Usecase: Make an API call to fetch comments of a post. Show loaders when the API call is in progress and also handle API errors.
+
+A redux-thunk implementation will look like this,
+
+function getComments(postId){
+    return (dispatch) => {
+        dispatch(getCommentsInProgress());
+        axios.get(`/v1/api/posts/${postId}/comments`).then(response => {
+            dispatch(getCommentsSuccess(response.data.comments));
+        }).catch(() => {
+            dispatch(getCommentsFailed());
+        });
+    }
+}
+and this is absolutely correct. But the action creator is bloated.
+
+We can write an Epic to implement the same using redux-observables.
+
+const getCommentsEpic = (action$, state$) => action$.pipe(
+    ofType('GET_COMMENTS'),
+    mergeMap((action) => from(axios.get(`/v1/api/posts/${action.payload.postId}/comments`).pipe(
+        map(response => getCommentsSuccess(response.data.comments)),
+        catchError(() => getCommentsFailed()),
+        startWith(getCommentsInProgress())
+    )
+);
+Now it allows us to have a clean and simple action creator like this,
+
+function getComments(postId) {
+    return {
+        type: 'GET_COMMENTS',
+        payload: {
+            postId
+        }
+    }
+}
+2. Request Debouncing
+Usecase: Provide autocompletion for a text field by calling an API whenever the value of the text field changes. API call should be made 1 second after the user has stopped typing.
+
+A redux-thunk implementation will look like this,
+
+let timeout;
+
+function valueChanged(value) {
+    return dispatch => {
+        dispatch(loadSuggestionsInProgress());
+        dispatch({
+            type: 'VALUE_CHANGED',
+            payload: {
+                value
+            }
+        });
+
+        // If changed again within 1 second, cancel the timeout
+        timeout && clearTimeout(timeout);
+
+        // Make API Call after 1 second
+        timeout = setTimeout(() => {
+        	axios.get(`/suggestions?q=${value}`)
+                .then(response =>
+                      dispatch(loadSuggestionsSuccess(response.data.suggestions)))
+                .catch(() => dispatch(loadSuggestionsFailed()))
+        }, 1000, value);
+    }
+}
+It requires a global variable timeout. When we start using global variables, our action creators are not longer pure functions. It also becomes difficult to unit test the action creators that use a global variable.
+
+We can implement the same with redux-observable using the .debounce operator.
+
+const loadSuggestionsEpic = (action$, state$) => action$.pipe(
+    ofType('VALUE_CHANGED'),
+    debounce(1000),
+    mergeMap(action => from(axios.get(`/suggestions?q=${action.payload.value}`)).pipe(
+    	map(response => loadSuggestionsSuccess(response.data.suggestions)),
+        catchError(() => loadSuggestionsFailed())
+    )),
+    startWith(loadSuggestionsInProgress())
+);
+Now, our action creators can be cleaned up, and more importantly, they can be pure functions again.
+
+function valueChanged(value) {
+    return {
+        type: 'VALUE_CHANGED',
+        payload: {
+            value
+        }
+    }
+}
