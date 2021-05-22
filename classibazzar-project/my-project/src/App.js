@@ -12,7 +12,7 @@ function App({fetchUser}) {
   return (
     <div className="App">
       this is just boiler plate
-      <button onClick={()=> ping())}>Fetch Data</button>
+      <button onClick={()=> ping()}>Fetch Data</button>
     </div>
   );
 }
