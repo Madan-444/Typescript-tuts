@@ -13,3 +13,4 @@ const store = createStore(
     epicMiddleware.run(pingEpic)
 
 export default store;
+console.log("The initial state",store.getState())
